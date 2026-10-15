@@ -13,6 +13,7 @@ if str(SCRIPTS_DIR) not in sys.path:
 from build_static_skill_pages import (  # noqa: E402
     PUBLIC_SITE,
     _source_url,
+    attach_security_scans,
     build_static_skill_pages,
     group_skill_copies,
     select_featured_skills,
@@ -36,6 +37,14 @@ def skill(name: str, **overrides):
         "quality_score": 75,
         "security_status": "passed",
         "install_status": "known_good",
+        "security_scan": {
+            "scanner_version": "1.1.6",
+            "ruleset_sha256": "a" * 64,
+            "scanned_at": "2026-10-15T03:00:00Z",
+            "content_sha256": "b" * 64,
+            "checks": ["frontmatter", "dangerous_patterns", "credentials"],
+            "finding_types": {},
+        },
     }
     record.update(overrides)
     return record
@@ -292,3 +301,55 @@ def test_unknown_license_is_explained_and_copy_paths_are_distinct(tmp_path):
     assert "Not declared in registry metadata" in detail
     assert "acme/repo/skills/copies" in detail
     assert "acme/repo/.claude/skills/copies" in detail
+
+
+def test_guide_explains_registry_scan_checks_and_findings(tmp_path):
+    scan = dict(skill("x")["security_scan"], finding_types={"warning:sensitive_path": 2, "warning:schema_validation": 1})
+    record = skill("scanned", security_scan=scan)
+
+    build_static_skill_pages([record], tmp_path)
+    detail = (tmp_path / "skills" / skill_page_slug(record) / "index.html").read_text(encoding="utf-8")
+
+    assert "<h2>What the registry checked</h2>" in detail
+    assert "Scanned 2026-10-15 by registry scanner 1.1.6" in detail
+    assert f"ruleset <code>{'a' * 12}</code>" in detail
+    assert "<li>Frontmatter and schema</li><li>Dangerous code patterns</li><li>Hardcoded credentials</li>" in detail
+    assert "3 warnings: schema validation (1), sensitive path (2)." in detail
+
+
+def test_guide_reports_clean_scan_without_inventing_findings(tmp_path):
+    record = skill("clean")
+
+    build_static_skill_pages([record], tmp_path)
+    detail = (tmp_path / "skills" / skill_page_slug(record) / "index.html").read_text(encoding="utf-8")
+
+    assert "<strong>Findings:</strong> Nothing was flagged." in detail
+
+
+@pytest.mark.parametrize("scan", [None, {"scanner_version": "1.1.6"}, dict(skill("x")["security_scan"], checks=["made_up"])])
+def test_guide_fails_without_valid_scan_evidence(tmp_path, scan):
+    record = skill("missing-scan", security_scan=scan)
+
+    with pytest.raises(ValueError, match="security"):
+        build_static_skill_pages([record], tmp_path)
+
+
+def test_attach_security_scans_copies_decision_summary_only():
+    decision = {
+        "id": "decision",
+        "scanner": {"name": "scanner", "version": "1.1.6", "ruleset_sha256": "r" * 64},
+        "provenance": {"scanned_at": "2026-10-15T03:00:00Z", "content_sha256": "c" * 64, "source_url": "x"},
+        "checks": ["frontmatter"],
+        "finding_types": {"warning:prompt_injection": 1},
+    }
+    records = attach_security_scans([{"id": "one"}, {"id": "two"}], {"one": {"security_decision": decision}, "two": {}})
+
+    assert records[0]["security_scan"] == {
+        "scanner_version": "1.1.6",
+        "ruleset_sha256": "r" * 64,
+        "scanned_at": "2026-10-15T03:00:00Z",
+        "content_sha256": "c" * 64,
+        "checks": ["frontmatter"],
+        "finding_types": {"warning:prompt_injection": 1},
+    }
+    assert "security_scan" not in records[1]
