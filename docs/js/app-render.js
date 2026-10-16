@@ -393,6 +393,7 @@ function createSkillCard(skill, isFeatured = false, showFavoriteBtn = true) {
     const install = isFeatured ? skill.install : skill.i;
     const branch = (isFeatured ? skill.branch : skill.b) || 'main';
 
+    const installCommand = getInstallCommand(install, branch);
     const isFavorite = state.favorites.includes(install);
     const isOfficial = categoryCode === 'off' || categoryCode === 'official';
 
@@ -422,11 +423,11 @@ function createSkillCard(skill, isFeatured = false, showFavoriteBtn = true) {
                 <div class="skill-tags">${tagsHtml}</div>
             </div>
             <div class="skill-install">
-                <div class="install-cmd">
+                ${installCommand ? `<div class="install-cmd">
                     <span class="prefix">$</span>
-                    <span>${escapeHtml(getInstallCommand(install, branch))}</span>
+                    <span>${escapeHtml(installCommand)}</span>
                     <button class="copy-btn" data-install="${escapeHtml(install)}" data-branch="${escapeHtml(branch)}" onclick="copyInstall(event)" title="Copy">📋</button>
-                </div>
+                </div>` : `<a href="${escapeHtml(getGitHubUrl(install, branch))}" onclick="event.stopPropagation()">Open source for manual installation →</a>`}
             </div>
         </div>
     `;
@@ -471,6 +472,7 @@ async function showSkillDetail(card) {
         `<span class="tag">#${escapeHtml(tag)}</span>`
     ).join(' ');
 
+    const installCommand = getInstallCommand(install, branch);
     const isFavorite = state.favorites.includes(install);
     const isOfficial = skill.c === 'off';
 
@@ -522,11 +524,11 @@ async function showSkillDetail(card) {
 
         <div style="margin-top: 1.5rem;">
             <strong>Install:</strong>
-            <div class="install-cmd" style="margin-top: 0.5rem;">
+            ${installCommand ? `<div class="install-cmd" style="margin-top: 0.5rem;">
                 <span class="prefix">$</span>
-                <span>${escapeHtml(getInstallCommand(install, skill.b || 'main'))}</span>
+                <span>${escapeHtml(installCommand)}</span>
                 <button class="copy-btn" data-install="${escapeHtml(install)}" data-branch="${escapeHtml(skill.b || 'main')}" onclick="copyInstall(event)" title="Copy">📋</button>
-            </div>
+            </div>` : `<p>Open the source below and copy the folder containing SKILL.md into your agent’s skills directory.</p>`}
         </div>
 
         <div style="margin-top: 1rem;">
@@ -780,6 +782,7 @@ function copyInstall(event, install) {
     install = install || event.currentTarget.getAttribute('data-install');
     const branch = event.currentTarget.getAttribute('data-branch') || 'main';
     const cmd = getInstallCommand(install, branch);
+    if (!cmd) return;
     navigator.clipboard.writeText(cmd).then(() => {
         const btn = event.target;
         btn.textContent = '✓';

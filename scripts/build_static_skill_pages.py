@@ -158,6 +158,16 @@ def _source_url(record: dict[str, Any], *, directory: bool = False) -> str:
     return f"{base}/{path + '/' if path else ''}SKILL.md"
 
 
+def _install_source(record: dict[str, Any]) -> str:
+    repo = str(record.get("repo") or "")
+    path = str(record.get("path") or "").strip("/")
+    # These delimiters cannot be represented as subpaths by the skills CLI.
+    if not repo or repo.startswith("local/") or any(char in path for char in "#:"):
+        return ""
+    branch = quote(str(record.get("branch") or "main"), safe="")
+    return f"{repo}{'/' + path if path else ''}#{branch}"
+
+
 def _render_detail_page(record: dict[str, Any], slug: str, related: list[dict[str, Any]]) -> str:
     def esc(value: Any) -> str:
         return html.escape(str(value), quote=True)
@@ -176,12 +186,19 @@ def _render_detail_page(record: dict[str, Any], slug: str, related: list[dict[st
         license_name = "Not declared in registry metadata"
     license_notice = "Check the original repository for permission and license terms before reuse. Registry metadata does not grant a license."
     scan_details = _render_security_scan(record, slug)
-    source = shlex.quote(_source_url(record, directory=True))
+    install_source = _install_source(record)
+    source = shlex.quote(install_source)
     command = f"npx skills add {source}"
     runtime_commands = "\n".join(
         f"# {label} → {path}\nnpx skills add {source} -g -a {agent}" for label, agent, path in RUNTIME_TARGETS
     )
-    badge_markdown = f"[![Listed on Claude Skills Registry]({BADGE_URL})]({canonical})"
+    install_details = (
+        f'<p>Install with the <a href="{SKILLS_CLI_URL}">skills CLI</a>. It asks which coding agents to install into:</p>'
+        f'<code>{esc(command)}</code><p>Or install globally for one agent:</p><code>{esc(runtime_commands)}</code>'
+        if install_source else
+        '<p>Open the source above and copy the folder containing SKILL.md into your agent’s skills directory.</p>'
+    )
+    badge_markdown = f"[![Listed on Claude Skills Registry]({BADGE_URL})]({PUBLIC_SITE})"
     return f'''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -226,13 +243,12 @@ def _render_detail_page(record: dict[str, Any], slug: str, related: list[dict[st
       <h1>{name}</h1><p class="intro">{description}</p>
       <div class="tags">{tags}</div>
       <a class="source" href="{esc(_source_url(record))}">View source: {repo} ↗</a>
-      <section><h2>Install</h2><p>Install with the <a href="{SKILLS_CLI_URL}">skills CLI</a>. It asks which coding agents to install into:</p>
-      <code>{esc(command)}</code><p>Or install globally for one agent:</p>
-      <code>{esc(runtime_commands)}</code><p class="note">Without the CLI, copy the source folder that contains SKILL.md into one of the paths above. Source-path status is inferred from metadata; it does not verify a live download. Scan and quality scores describe registry checks and are not a guarantee of safety.</p></section>
+      <section><h2>Install</h2>{install_details}
+      <p class="note">Manual install locations: Claude Code ~/.claude/skills/, Codex ~/.agents/skills/, Cursor ~/.cursor/skills/. Source-path status is inferred from metadata; it does not verify a live download. Scan and quality scores describe registry checks and are not a guarantee of safety.</p></section>
       {scan_details}
       <section><h2>Attribution and permissions</h2><p>{esc(license_notice)}</p><p>This guide links to the author’s instructions and includes metadata only.</p>
       <a href="{REMOVAL_URL}">Request removal or correct attribution</a></section>
-      <section><h2>For the skill author</h2><p>Add this badge to your README so readers can find this guide:</p>
+      <section><h2>For the skill author</h2><p>Add this badge to your README to link readers to the registry home:</p>
       <p><img src="{BADGE_URL}" alt="Listed on Claude Skills Registry" width="140" height="20"></p>
       <code>{esc(badge_markdown)}</code></section>
       <section><h2>Copies with matching content</h2><p>Exact Markdown body copies across {esc(record.get('repository_count', 1))} repositories. This count does not identify the original author.</p><ul>{copy_links}</ul></section>

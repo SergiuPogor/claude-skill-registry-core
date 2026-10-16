@@ -1,8 +1,8 @@
 // Skill source links and install commands, shared by search cards and the detail modal.
 
-// Split an install path ("owner/repo/path[/SKILL.md]") into encoded GitHub parts
+// Split an install path ("owner/repo/path[/SKILL.md]") without encoding repository paths
 function parseSkillSource(install, branch = 'main') {
-    if (!install) return null;
+    if (!install || install.startsWith('local/')) return null;
     const parts = install.split('/');
     if (parts.length < 2) return null;
 
@@ -14,16 +14,22 @@ function parseSkillSource(install, branch = 'main') {
     }
     return {
         base: `https://github.com/${encodeURIComponent(parts[0])}/${encodeURIComponent(parts[1])}`,
-        branch: encodeURIComponent(branch),
-        path: path ? path.split('/').map(encodeURIComponent).join('/') : ''
+        repo: parts.slice(0, 2).join('/'),
+        branch,
+        path
     };
 }
 
 // Generate proper GitHub URL from install path and branch
 function getGitHubUrl(install, branch = 'main') {
+    if (install && install.startsWith('local/')) {
+        const path = install.slice(6).replace(/\/SKILL\.md$/i, '');
+        return `https://github.com/majiayu000/claude-skill-registry/blob/main/skills/${path.split('/').map(encodeURIComponent).join('/')}/SKILL.md`;
+    }
     const source = parseSkillSource(install, branch);
     if (!source) return '#';
-    return `${source.base}/blob/${source.branch}/${source.path ? source.path + '/' : ''}SKILL.md`;
+    const path = source.path.split('/').map(encodeURIComponent).join('/');
+    return `${source.base}/blob/${encodeURIComponent(source.branch)}/${path ? path + '/' : ''}SKILL.md`;
 }
 
 function shellQuote(value) {
@@ -34,7 +40,8 @@ function shellQuote(value) {
 // skills CLI command (github.com/vercel-labs/skills); it prompts for target agents
 function getInstallCommand(install, branch = 'main') {
     const source = parseSkillSource(install, branch);
-    if (!source) return '';
-    const tree = `${source.base}/tree/${source.branch}${source.path ? '/' + source.path : ''}`;
-    return `npx skills add ${shellQuote(tree)}`;
+    // The CLI treats # as a ref delimiter and : as a URL, even inside subpaths.
+    if (!source || /[#:]/.test(source.path)) return '';
+    const target = `${source.repo}${source.path ? '/' + source.path : ''}#${encodeURIComponent(source.branch)}`;
+    return `npx skills add ${shellQuote(target)}`;
 }

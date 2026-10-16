@@ -695,13 +695,23 @@ const hostileCard = createSkillCard({
   g: [`</span><img src=x onerror=alert(1)>`], r: 0, i: 'acme/demo'
 }, false, false);
 assert(!hostileCard.includes('<img'));
-assert(hostileCard.includes('npx skills add https://github.com/acme/demo/tree/main'));
+assert(hostileCard.includes('acme/demo#main'));
 assert.strictEqual(
   getInstallCommand('facebook/react/.claude/skills/fix/SKILL.md', 'main'),
-  'npx skills add https://github.com/facebook/react/tree/main/.claude/skills/fix'
+  "npx skills add 'facebook/react/.claude/skills/fix#main'"
 );
 const hostileCommand = getInstallCommand(`acme/demo/a'b; rm -rf ~`, 'main');
-assert(!hostileCommand.includes('; rm'));
+const { execFileSync } = require('child_process');
+const args = JSON.parse(execFileSync('python3', ['-c', 'import json,shlex,sys; print(json.dumps(shlex.split(sys.argv[1])))', hostileCommand], {encoding:'utf8'}));
+assert.deepStrictEqual(args, ['npx', 'skills', 'add', "acme/demo/a'b; rm -rf ~#main"]);
+assert.strictEqual(getInstallCommand('acme/demo/技能/a b', 'feature/new'), "npx skills add 'acme/demo/技能/a b#feature%2Fnew'");
+assert.strictEqual(getInstallCommand('acme/demo/C# helper'), '');
+assert.strictEqual(getInstallCommand('local/development/demo'), '');
+assert.strictEqual(getGitHubUrl('local/development/demo'), 'https://github.com/majiayu000/claude-skill-registry/blob/main/skills/development/demo/SKILL.md');
+const localCard = createSkillCard({n:'local', c:'development', i:'local/development/demo'}, false, false);
+assert(!localCard.includes('npx skills add'));
+assert(!localCard.includes('copy-btn'));
+assert(localCard.includes('manual installation'));
 assert(render.includes('escapeHtml(getGitHubUrl('));
 assert(index.indexOf('js/skill-source.js') < index.indexOf('js/app-render.js'));
 assert(!render.includes("copyInstall(event, '${"));

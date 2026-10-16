@@ -113,7 +113,7 @@ is no longer developed.
 ### For skill authors
 
 Each skill guide includes a "Listed on Claude Skills Registry" badge snippet
-that links readers to the guide. Copy it from the "For the skill author"
+that links readers to the registry home. Copy it from the "For the skill author"
 section of your skill's guide page.
 
 ### Option 3: Direct API

@@ -288,7 +288,7 @@ def test_install_command_quotes_source_arguments(tmp_path):
     args = shlex.split(command)
     assert args[:3] == ["npx", "skills", "add"]
     assert len(args) == 4
-    assert args[3] == "https://github.com/acme/skills/tree/feat%2Fspace%20%24%28id%29/skills/a%20space%3B%20touch%20/tmp/unsafe"
+    assert args[3] == "acme/skills/skills/a space; touch /tmp/unsafe#feat%2Fspace%20%24%28id%29"
     assert "--branch" not in command
 
 
@@ -367,10 +367,33 @@ def test_install_lists_runtime_targets_and_author_badge(tmp_path):
     slug = skill_page_slug(record)
     detail = (tmp_path / "skills" / slug / "index.html").read_text()
     blocks = [html.unescape(block) for block in re.findall(r"<code>(.*?)</code>", detail, re.S)]
-    source = "https://github.com/acme/skills/tree/main/skills/portable"
+    source = "acme/skills/skills/portable#main"
     commands = [shlex.split(line) for line in blocks[1].splitlines() if not line.startswith("#")]
     assert commands == [["npx", "skills", "add", source, "-g", "-a", agent] for _, agent, _ in RUNTIME_TARGETS]
     for label, _, path in RUNTIME_TARGETS:
         assert f"# {label} → {path}" in blocks[1]
-    assert blocks[2] == f"[![Listed on Claude Skills Registry]({BADGE_URL})]({PUBLIC_SITE}skills/{slug}/)"
+    assert f"[![Listed on Claude Skills Registry]({BADGE_URL})]({PUBLIC_SITE})" in blocks
     assert (ROOT / "docs" / "assets" / "listed-badge.svg").is_file()
+
+
+def test_unrepresentable_cli_path_uses_manual_install(tmp_path):
+    record = skill("hash-path", path="skills/C# helper")
+    build_static_skill_pages([record], tmp_path)
+    detail = (tmp_path / "skills" / skill_page_slug(record) / "index.html").read_text()
+    assert "npx skills add" not in detail
+    assert "copy the folder containing SKILL.md" in detail
+    assert "/skills/C%23%20helper/SKILL.md" in detail
+
+
+def test_badge_target_survives_content_and_selection_changes(tmp_path):
+    import html
+    from build_static_skill_pages import BADGE_URL
+    record = skill("badge", content_fingerprint="before")
+    badge = f"[![Listed on Claude Skills Registry]({BADGE_URL})]({PUBLIC_SITE})"
+    for fingerprint in ("before", "after"):
+        record["page_identity"] = fingerprint
+        build_static_skill_pages([record], tmp_path)
+        page = tmp_path / "skills" / skill_page_slug(record) / "index.html"
+        assert badge in html.unescape(page.read_text())
+    build_static_skill_pages([], tmp_path)
+    assert badge.endswith(f"]({PUBLIC_SITE})")
