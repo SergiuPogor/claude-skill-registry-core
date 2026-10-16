@@ -790,7 +790,7 @@ class TestBackfillTargets:
             )
         )
 
-        assert result == ([], [], "", {})
+        assert result == ([], [], "", {}, {})
 
     def test_unpinned_bundle_rejects_response_larger_than_advertised_size(self, tmp_path):
         """Fail closed when body exceeds listing size; leave no on-disk artifact."""

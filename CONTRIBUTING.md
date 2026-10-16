@@ -56,6 +56,9 @@ license from the same source revision. GPL skill text is preserved rather
 than rewriting its frontmatter to match the catalog summary; security checks
 still apply. Maintainers must verify that the
 selected license covers the submitted files and retain upstream attribution.
+GPL downloads fail if any source file falls outside the supported archive
+scope. License provenance records the selected upstream path so liveness
+checks cannot substitute a different license when the original disappears.
 
 ## How to Correct an Existing Archived Skill
 

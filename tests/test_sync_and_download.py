@@ -2769,7 +2769,9 @@ def test_select_shard_skills_is_deterministic():
 
 
 @pytest.mark.parametrize("pinned", [False, True])
-@pytest.mark.parametrize("license_case", ["root", "local", "missing", "empty", "unavailable", "symlink"])
+@pytest.mark.parametrize("license_case", [
+    "root", "local", "missing", "empty", "unavailable", "symlink", "empty_response", "omitted_source",
+])
 def test_gpl_archive_keeps_reference_and_license_or_fails_closed(tmp_path, monkeypatch, pinned, license_case):
     module = load_module()
     repo = "acme/gpl-skill"
@@ -2790,6 +2792,8 @@ def test_gpl_archive_keeps_reference_and_license_or_fails_closed(tmp_path, monke
         files[license_path] = license_body
     if license_case == "local":
         files["LICENSE"] = b"Different repository-level terms; do not override the skill license.\n"
+    if license_case == "omitted_source":
+        files[f"{source_dir}/lib/helper.py"] = b"print('Required GPL source')\n"
     tree = [git_blob_entry(path, body) for path, body in files.items()]
     if license_case == "symlink":
         next(entry for entry in tree if entry["path"] == license_path)["mode"] = "120000"
@@ -2799,6 +2803,8 @@ def test_gpl_archive_keeps_reference_and_license_or_fails_closed(tmp_path, monke
         routes[f"{raw_base}/{path}"] = FakeResponse(200, body=body, text=body.decode())
     if license_case == "unavailable":
         routes[f"{raw_base}/{license_path}"] = FakeResponse(404)
+    if license_case == "empty_response":
+        routes[f"{raw_base}/{license_path}"] = FakeResponse(200, body=b"")
     if not pinned:
         for directory in ("", source_dir, f"{source_dir}/references"):
             contents = [
@@ -2809,6 +2815,8 @@ def test_gpl_archive_keeps_reference_and_license_or_fails_closed(tmp_path, monke
             ]
             if directory == source_dir:
                 contents.append({"type": "dir", "path": f"{source_dir}/references"})
+                if license_case == "omitted_source":
+                    contents.append({"type": "dir", "path": f"{source_dir}/lib"})
             suffix = f"/{directory}" if directory else ""
             routes[f"https://api.github.com/repos/{repo}/contents{suffix}?ref=main"] = FakeResponse(200, json_payload=contents)
     install_fake_aiohttp(monkeypatch, routes)
@@ -2843,6 +2851,7 @@ def test_gpl_archive_keeps_reference_and_license_or_fails_closed(tmp_path, monke
     assert metadata["license"] == "GPL-3.0"
     assert metadata["distribution"] == "restricted"
     assert metadata["bundled_files"] == [license_filename, "references/guide.md"]
+    assert metadata["license_source_paths"] == {license_filename: license_path}
     if pinned:
         assert metadata["github_commit_sha"] == sha
         assert metadata["bundled_file_blobs"] == {

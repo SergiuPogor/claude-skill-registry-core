@@ -250,6 +250,16 @@ def _target_from_metadata(metadata_path: Path, skills_dir: Path) -> Target:
         raise ValueError(f"bundled_files mismatch: declared={sorted(normalized)}, actual={actual}")
     if not bundled_file_blobs_match(metadata, skill_dir, normalized):
         raise ValueError("bundled_file_blobs do not match archived support file bytes")
+    if metadata.get("license") in GPL_SOURCE_LICENSES:
+        license_paths = metadata.get("license_source_paths")
+        license_files = set(normalized) & LICENSE_FILENAMES
+        if (
+            not license_files
+            or not isinstance(license_paths, dict)
+            or set(license_paths) != license_files
+            or any(not is_safe_portable_relative_path(path) for path in license_paths.values())
+        ):
+            raise ValueError("GPL license_source_paths must identify every archived license")
     return Target(
         stable_key=f"{repo.casefold()}:{source_path}",
         repo=repo,
@@ -380,10 +390,9 @@ def verify_targets(targets: list[Target], client: GitHubClient, checked_at: str)
             for target in branch_targets:
                 source_dir = PurePosixPath(target.source_path).parent
                 expected_assets = {
-                    bundled_file
+                    target.metadata["license_source_paths"][bundled_file]
                     if target.metadata.get("license") in GPL_SOURCE_LICENSES
                     and bundled_file in LICENSE_FILENAMES
-                    and (source_dir / bundled_file).as_posix() not in upstream_paths
                     else (source_dir / bundled_file).as_posix()
                     for bundled_file in target.bundled_files
                 }

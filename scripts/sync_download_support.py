@@ -85,6 +85,8 @@ async def collect_contents_bundled_file_entries(
         for entry in await listing_fetcher(session, repo, branch, current_dir):
             entry_type = entry.get("type")
             repo_path = str(entry.get("path") or "").strip("/")
+            if repo_path == resolved_skill_path:
+                continue
             rel_path = bundled_relative_path(source_dir, repo_path)
             if not rel_path:
                 continue
@@ -93,16 +95,16 @@ async def collect_contents_bundled_file_entries(
                 rel_path, 0, reject_nonportable=True
             )
             if is_submodule_contents_entry(entry):
-                incomplete = incomplete or support_scope
+                incomplete = incomplete or support_scope or include_license
                 continue
             if entry_type == "dir":
                 if should_recurse_bundled_dir(rel_path):
                     queue.append(repo_path)
-                elif support_scope:
+                elif support_scope or include_license:
                     incomplete = True
                 continue
             if entry_type != "file":
-                incomplete = incomplete or support_scope
+                incomplete = incomplete or support_scope or include_license
                 continue
             try:
                 size = int(entry.get("size") or 0)
@@ -121,7 +123,7 @@ async def collect_contents_bundled_file_entries(
                         "sha": entry.get("sha") or "",
                     }
                 )
-            elif eligible_file:
+            elif eligible_file or include_license:
                 incomplete = True
 
     if include_license and source_dir and not any(
@@ -313,10 +315,12 @@ async def collect_pinned_tree_entries(
         if entry_type == "tree" and mode == "040000":
             continue
         if entry_type != "blob" or mode not in {"100644", "100755"}:
-            if in_support_scope:
+            if in_support_scope or include_license:
                 raise BundledListingError(repo_path, f"unsupported Git object mode {mode}")
             continue
         if not eligible_at_size:
+            if include_license:
+                raise BundledListingError(repo_path, "GPL source file is outside supported archive scope")
             if eligible_without_size_limit:
                 omitted_eligible_file = True
             continue
@@ -375,11 +379,12 @@ async def download_bundled_files_to_directory(
     contents_collector: Any,
     pinned_tree_result: tuple[list[dict], bool, dict] | None = None,
     require_license: bool = False,
-) -> tuple[list[str], list[str], str, dict[str, str]]:
+) -> tuple[list[str], list[str], str, dict[str, str], dict[str, str]]:
     """Download a validated support bundle and return its immutable blob map."""
     archived: list[str] = []
     failed: list[str] = []
     blob_ids: dict[str, str] = {}
+    license_sources: dict[str, str] = {}
     try:
         if pin_commit_sha:
             entries, truncated, _source_blob = (
@@ -402,11 +407,11 @@ async def download_bundled_files_to_directory(
             )
     except BundledListingError as exc:
         if not require_complete_archive:
-            return archived, failed, "", blob_ids
-        return archived, [str(exc)], "bundled_listing_failed", blob_ids
+            return archived, failed, "", blob_ids, license_sources
+        return archived, [str(exc)], "bundled_listing_failed", blob_ids, license_sources
     if truncated and require_complete_archive:
         message = "eligible bundled files exceed per-skill count or byte limits"
-        return archived, [message], "bundled_limits_exceeded", blob_ids
+        return archived, [message], "bundled_limits_exceeded", blob_ids, license_sources
     if require_license and not any(
         entry["relative_path"] in LICENSE_FILENAMES and entry["size"] > 0
         for entry in entries
@@ -416,6 +421,7 @@ async def download_bundled_files_to_directory(
             ["GPL source archive requires LICENSE or LICENSE.md"],
             "bundled_listing_failed",
             blob_ids,
+            license_sources,
         )
     if not entries:
         if require_complete_archive and not allow_empty_complete_archive:
@@ -424,8 +430,9 @@ async def download_bundled_files_to_directory(
                 ["required bundled archive contains no eligible support files"],
                 "bundled_listing_incomplete",
                 blob_ids,
+                license_sources,
             )
-        return archived, failed, "", blob_ids
+        return archived, failed, "", blob_ids, license_sources
 
     skill_root = skill_dir.resolve()
     for entry in entries:
@@ -468,6 +475,9 @@ async def download_bundled_files_to_directory(
         if not is_safe_bundled_file(rel_path, len(content)):
             failed.append(rel_path)
             continue
+        if require_license and rel_path in LICENSE_FILENAMES and not content.strip():
+            failed.append(rel_path)
+            continue
         if pin_commit_sha and not content_matches_git_blob(entry, content):
             failed.append(rel_path)
             continue
@@ -475,6 +485,8 @@ async def download_bundled_files_to_directory(
         target_path.write_bytes(content)
         target_path.chmod(0o755 if entry.get("mode") == "100755" else 0o644)
         archived.append(rel_path)
+        if require_license and rel_path in LICENSE_FILENAMES:
+            license_sources[rel_path] = entry["repo_path"]
         if pin_commit_sha:
             blob_ids[rel_path] = entry["sha"]
 
@@ -486,10 +498,10 @@ async def download_bundled_files_to_directory(
             except ValueError:
                 continue
             target_path.unlink(missing_ok=True)
-        return [], [], "", {}
+        return [], [], "", {}, {}
 
     failure_reason = "bundled_download_failed" if failed else ""
-    return archived, failed, failure_reason, blob_ids
+    return archived, failed, failure_reason, blob_ids, license_sources
 
 
 def content_matches_git_blob(entry: dict, content: bytes) -> bool:
@@ -547,6 +559,7 @@ def build_archived_skill_metadata(
     dir_name: str,
     bundled_files: list[str],
     bundled_file_blobs: dict[str, str] | None = None,
+    license_source_paths: dict[str, str] | None = None,
     commit_sha: str = "",
     assets_verified_at: str = "",
 ) -> dict:
@@ -580,6 +593,7 @@ def build_archived_skill_metadata(
         "dir_name": dir_name,
         "archive_mode": "directory" if bundled_files else "skill-md",
         "bundled_files": bundled_files,
+        **({"license_source_paths": license_source_paths} if license_source_paths else {}),
         **(
             {"bundled_file_blobs": dict(sorted(bundled_file_blobs.items()))}
             if commit_sha and bundled_files and bundled_file_blobs

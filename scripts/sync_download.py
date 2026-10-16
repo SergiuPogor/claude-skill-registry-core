@@ -554,13 +554,14 @@ async def download_skills(
                                             require_license=require_license,
                                         )
                                         if redistribution_approved
-                                        else ([], [], "", {})
+                                        else ([], [], "", {}, {})
                                     )
                                     (
                                         bundled_files,
                                         bundled_failures,
                                         bundled_failure_reason,
                                         bundled_file_blobs,
+                                        license_source_paths,
                                     ) = bundle_result
                                     if bundled_failures:
                                         failure_reason = (
@@ -594,6 +595,7 @@ async def download_skills(
                                                 dir_name=skill_dir.name,
                                                 bundled_files=bundled_files,
                                                 bundled_file_blobs=bundled_file_blobs,
+                                                license_source_paths=license_source_paths,
                                                 commit_sha=download_ref if pin_commit_sha else "",
                                                 assets_verified_at=(
                                                     to_utc_iso(utc_now()) if pin_commit_sha else ""
