@@ -529,6 +529,8 @@ elements.searchInput.addEventListener('input', debounce((e) => {
 elements.searchInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
         search(e.target.value);
+        // Fuzzy highlighted matches can hide an exact match elsewhere.
+        if (state.currentQuery && state.index.isLite) void activateFullSearch();
     }
 });
 

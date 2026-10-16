@@ -20,7 +20,9 @@ function element() {
             contains: name => classes.has(name),
             toggle: (name, force) => force ? classes.add(name) : classes.delete(name)
         },
-        addEventListener() {}, setAttribute() {}, removeAttribute() {},
+        listeners: {},
+        addEventListener(event, handler) { this.listeners[event] = handler; },
+        setAttribute() {}, removeAttribute() {},
         appendChild() {}, querySelector: () => element(),
         insertAdjacentHTML(_, html) { this.innerHTML += html; }
     };
@@ -110,6 +112,17 @@ function reset() {
     assert.strictEqual(loads, 2);
     assert.strictEqual(vm.runInContext('state.results[0].item.n', context), 'falsify');
     assert.strictEqual(node('result-count').textContent, '1 results');
+
+    reset();
+    // A fuzzy startup match must not prevent an explicitly submitted search
+    // from finding an exact long-tail match in the full catalog.
+    vm.runInContext('state.fuse.search = () => [{ item: state.index.s[0] }]', context);
+    node('search-input').listeners.keydown({ key: 'Enter', target: { value: 'falsify' } });
+    assert.strictEqual(loads, 1, 'Enter must expand even when highlighted fuzzy matches exist');
+    const submitted = context.activateFullSearch();
+    finish(full);
+    await submitted;
+    assert.strictEqual(vm.runInContext('state.results[0].item.n', context), 'falsify');
 })().catch(error => { console.error(error); process.exitCode = 1; });
 """], cwd=ROOT, capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stderr
