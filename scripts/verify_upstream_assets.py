@@ -22,7 +22,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from archive_preflight import iter_canonical_archive_paths
 from audit_skill_assets import canonical_source_identity_from_metadata
 from skill_asset_audit import classify_files, fetch_repo_tree, verdict_from_counts
-from sync_download_support import bundled_file_blobs_match, exact_source_branch
+from sync_download_support import (
+    GPL_SOURCE_LICENSES,
+    LICENSE_FILENAMES,
+    bundled_file_blobs_match,
+    exact_source_branch,
+)
 from sync_pipeline_support import (
     has_case_conflicting_paths,
     is_safe_portable_relative_path,
@@ -375,7 +380,12 @@ def verify_targets(targets: list[Target], client: GitHubClient, checked_at: str)
             for target in branch_targets:
                 source_dir = PurePosixPath(target.source_path).parent
                 expected_assets = {
-                    (source_dir / bundled_file).as_posix() for bundled_file in target.bundled_files
+                    bundled_file
+                    if target.metadata.get("license") in GPL_SOURCE_LICENSES
+                    and bundled_file in LICENSE_FILENAMES
+                    and (source_dir / bundled_file).as_posix() not in upstream_paths
+                    else (source_dir / bundled_file).as_posix()
+                    for bundled_file in target.bundled_files
                 }
                 missing_assets = sorted(expected_assets - upstream_paths)
                 if target.source_path not in upstream_paths:

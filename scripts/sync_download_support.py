@@ -28,13 +28,17 @@ from utils import build_legal_metadata, classify_license, normalize_license
 SHA_PATTERN = re.compile(r"[0-9a-fA-F]{40}")
 MAX_SKILL_FILE_BYTES = 1_000_000
 GITHUB_RAW_BASE = "https://raw.githubusercontent.com"
+GPL_SOURCE_LICENSES = {"GPL-3.0", "GPL-3.0-only", "GPL-3.0-or-later"}
+LICENSE_FILENAMES = {"LICENSE", "LICENSE.md"}
 
 
 def asset_redistribution_approved(skill: dict) -> bool:
     """Return whether metadata explicitly permits bundled-asset redistribution."""
     license_name = normalize_license(str(skill.get("license") or ""))
     distribution = str(skill.get("distribution") or "").strip()
-    return classify_license(license_name) == "compatible" and distribution == "compatible"
+    return (
+        classify_license(license_name) == "compatible" and distribution == "compatible"
+    ) or (license_name in GPL_SOURCE_LICENSES and distribution == "restricted")
 
 
 def select_bundled_file_entries(candidates: list[dict]) -> tuple[list[dict], bool]:
@@ -64,6 +68,7 @@ async def collect_contents_bundled_file_entries(
     resolved_skill_path: str,
     *,
     listing_fetcher: Any,
+    include_license: bool = False,
 ) -> tuple[list[dict], bool]:
     """Collect ordinary Contents API entries and report any support-scope omission."""
     source_dir = skill_source_dir(resolved_skill_path)
@@ -119,6 +124,27 @@ async def collect_contents_bundled_file_entries(
             elif eligible_file:
                 incomplete = True
 
+    if include_license and source_dir and not any(
+        entry["relative_path"] in LICENSE_FILENAMES for entry in candidates
+    ):
+        for entry in await listing_fetcher(session, repo, branch, ""):
+            repo_path = entry.get("path")
+            if repo_path not in LICENSE_FILENAMES:
+                continue
+            if entry.get("type") != "file" or is_submodule_contents_entry(entry):
+                raise BundledListingError(repo_path, "license is not a regular file")
+            size = entry.get("size")
+            if not isinstance(size, int) or not is_safe_bundled_file(repo_path, size):
+                raise BundledListingError(repo_path, "license has an invalid size")
+            candidates.append(
+                {
+                    "repo_path": repo_path,
+                    "relative_path": repo_path,
+                    "download_url": entry.get("download_url") or "",
+                    "size": size,
+                    "sha": entry.get("sha") or "",
+                }
+            )
     selected, truncated = select_bundled_file_entries(candidates)
     return selected, truncated or incomplete
 
@@ -205,6 +231,7 @@ async def collect_pinned_tree_entries(
     *,
     timeout: Any,
     tree_cache: dict[tuple[str, str], list[dict]],
+    include_license: bool = False,
 ) -> tuple[list[dict], bool, dict]:
     """Collect a complete, regular-file-only bundle from one immutable Git tree."""
     cache_key = (repo, commit_sha)
@@ -256,6 +283,10 @@ async def collect_pinned_tree_entries(
     }
 
     source_dir = skill_source_dir(resolved_skill_path)
+    local_license_paths = {
+        f"{source_dir}/{name}" if source_dir else name for name in LICENSE_FILENAMES
+    }
+    has_local_license = any(entry.get("path") in local_license_paths for entry in entries)
     candidates = []
     omitted_eligible_file = False
     for entry in entries:
@@ -263,6 +294,8 @@ async def collect_pinned_tree_entries(
         if not isinstance(repo_path, str) or repo_path == resolved_skill_path:
             continue
         rel_path = bundled_relative_path(source_dir, repo_path)
+        if include_license and not has_local_license and repo_path in LICENSE_FILENAMES:
+            rel_path = repo_path
         if not rel_path:
             continue
         try:
@@ -341,6 +374,7 @@ async def download_bundled_files_to_directory(
     tree_cache: dict[tuple[str, str], list[dict]],
     contents_collector: Any,
     pinned_tree_result: tuple[list[dict], bool, dict] | None = None,
+    require_license: bool = False,
 ) -> tuple[list[str], list[str], str, dict[str, str]]:
     """Download a validated support bundle and return its immutable blob map."""
     archived: list[str] = []
@@ -358,11 +392,13 @@ async def download_bundled_files_to_directory(
                     resolved_skill_path,
                     timeout=timeout,
                     tree_cache=tree_cache,
+                    include_license=require_license,
                 )
             )
         else:
+            kwargs = {"include_license": True} if require_license else {}
             entries, truncated = await contents_collector(
-                session, repo, branch, resolved_skill_path
+                session, repo, branch, resolved_skill_path, **kwargs
             )
     except BundledListingError as exc:
         if not require_complete_archive:
@@ -371,6 +407,16 @@ async def download_bundled_files_to_directory(
     if truncated and require_complete_archive:
         message = "eligible bundled files exceed per-skill count or byte limits"
         return archived, [message], "bundled_limits_exceeded", blob_ids
+    if require_license and not any(
+        entry["relative_path"] in LICENSE_FILENAMES and entry["size"] > 0
+        for entry in entries
+    ):
+        return (
+            archived,
+            ["GPL source archive requires LICENSE or LICENSE.md"],
+            "bundled_listing_failed",
+            blob_ids,
+        )
     if not entries:
         if require_complete_archive and not allow_empty_complete_archive:
             return (

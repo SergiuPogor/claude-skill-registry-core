@@ -46,7 +46,16 @@ This example assumes MIT covers the skill and its bundled files. Use the
 upstream's actual license and provide its license text; maintainers review
 redistribution eligibility before accepting bundled assets. License disclosure
 in the PR body must also be reflected in the source row. Bundled assets require
-an approved compatible license and `distribution: "compatible"`.
+an approved compatible license and `distribution: "compatible"`, or GPL-3.0
+(`GPL-3.0-only` / `GPL-3.0-or-later` also accepted) with
+`distribution: "restricted"`. GPL entries are separate source works under
+their upstream license, not relicensed as MIT. The downloader requires their
+complete support files and a nonempty `LICENSE` or `LICENSE.md`, preferring
+the skill directory's license and otherwise copying the repository-root
+license from the same source revision. GPL skill text is preserved rather
+than rewriting its frontmatter to match the catalog summary; security checks
+still apply. Maintainers must verify that the
+selected license covers the submitted files and retain upstream attribution.
 
 ## How to Correct an Existing Archived Skill
 
