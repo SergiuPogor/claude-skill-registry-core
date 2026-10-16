@@ -94,9 +94,8 @@ For clone/update tips on large repositories, see [docs/FAST_CLONE.md](docs/FAST_
 
 ### Option 2: CLI
 
-Every skill guide and search result shows a ready-to-copy command for the
-[skills CLI](https://github.com/vercel-labs/skills), which asks which coding
-agents to install into:
+Skill guides and search results show a ready-to-copy command for supported
+source paths, or a source link for manual installation. The [skills CLI](https://github.com/vercel-labs/skills) asks which coding agents to install into:
 
 ```bash
 npx skills add https://github.com/anthropics/skills/tree/main/skills/docx

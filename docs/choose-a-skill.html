@@ -34,7 +34,7 @@
 <section id="install"><h2>3. Select the exact installation path</h2>
 <p>Review the source first, then install the exact subdirectory with <a href="https://github.com/vercel-labs/skills">the skills CLI</a>. It asks which coding agents to install into:</p>
 <code>npx skills add https://github.com/anthropics/skills/tree/main/skills/docx</code>
-<p>To install globally for one agent, add <strong>-g -a claude-code</strong> (installs to ~/.claude/skills/), <strong>-g -a codex</strong> (~/.agents/skills/) or <strong>-g -a cursor</strong> (~/.cursor/skills/). Every skill guide shows these commands for its own source path. For a maintained collection organized into task bundles, see <a href="https://github.com/majiayu000/spellbook#install">Spellbook</a>. Do not copy the entire aggregate archive as one skill.</p></section>
+<p>To install globally for one agent, add <strong>-g -a claude-code</strong> (installs to ~/.claude/skills/), <strong>-g -a codex</strong> (~/.agents/skills/) or <strong>-g -a cursor</strong> (~/.cursor/skills/). Guides show these commands for supported source paths; other paths include manual installation instructions. For a maintained collection organized into task bundles, see <a href="https://github.com/majiayu000/spellbook#install">Spellbook</a>. Do not copy the entire aggregate archive as one skill.</p></section>
 <section id="faq"><h2>Common questions</h2>
 <h3>The skill installed, but my agent cannot see it. What next?</h3>
 <p>Compare the installed location with the directory read by your agent and session. Run <strong>npx skills ls</strong> to see where each skill was installed, then restart the agent so it reloads its skills directory. Installation into one runtime's directory does not establish visibility in another.</p>
