@@ -94,6 +94,28 @@ assert.strictEqual(node('result-count').textContent, '0 results in highlighted i
 assert(!node('empty-state').classList.contains('hidden'));
 
 (async () => {
+    vm.runInContext(`
+        state.index = { isLite: false, t: 4, s: [
+            { n: 'Review', i: 'acme/matching-copy', c: 'dev', r: 1, canonical_id: 'group-a' },
+            { n: 'Review', i: 'acme/other-copy', c: 'dev', r: 99, canonical_id: 'group-a' },
+            { n: 'Review', i: 'acme/different-body', c: 'dev', r: 2, canonical_id: 'group-b' },
+            { n: 'Review', i: 'acme/security-copy', c: 'sec', r: 3, canonical_id: 'group-a' }
+        ] };
+        state.fuse.search = () => state.index.s.map((item, score) => ({ item, score }));
+    `, context);
+    context.search('review');
+    assert.strictEqual(node('result-count').textContent, '2 results');
+    assert.deepStrictEqual(Array.from(vm.runInContext('state.results.map(r => r.item.i)', context)),
+        ['acme/matching-copy', 'acme/different-body']);
+    vm.runInContext("state.currentCategory = 'sec'", context);
+    context.search('review');
+    assert.strictEqual(node('result-count').textContent, '1 results');
+    assert.strictEqual(vm.runInContext('state.results[0].item.i', context), 'acme/security-copy');
+    vm.runInContext("state.currentCategory = ''; state.currentQuery = ''; state.currentSort = 'stars'", context);
+    await context.searchWithFiltersOnly();
+    assert.strictEqual(node('result-count').textContent, '2 results');
+    assert.strictEqual(vm.runInContext('state.results[0].item.i', context), 'acme/other-copy');
+    vm.runInContext("state.currentSort = 'relevance'; state.currentQuery = 'missing'", context);
     context.fetchJson = async () => { throw Error('offline'); };
     await context.init();
     assert.strictEqual(node('search-scope').textContent,
