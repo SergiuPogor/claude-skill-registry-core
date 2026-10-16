@@ -405,7 +405,7 @@ async def download_skills(
             relative_candidates = build_relative_probe_order(relative_candidates, manifest_entry)
         attempts = 0
         commit_resolution_failed = False
-        commit_errors = []
+        attempt_history = []
 
         async with semaphore:
             if exact_paths_only and pin_commit_sha:
@@ -438,7 +438,7 @@ async def download_skills(
                         )
                     except Exception as exc:  # noqa: BLE001 — recorded as a failed branch
                         commit_resolution_failed = True
-                        commit_errors.append(f"{failure_source}: {type(exc).__name__}: {exc}")
+                        attempt_history.append(f"{failure_source}: {type(exc).__name__}: {exc}")
                         logger.warning("Unable to pin %s@%s: %s", repo, branch, exc)
                         continue
                 for relative_path in relative_candidates:
@@ -447,6 +447,7 @@ async def download_skills(
                         "github_branch": branch,
                         "github_commit_sha": download_ref if pin_commit_sha else "",
                     })
+                    attempt_history.append(failure_source)
                     encoded_path = quote(relative_path, safe="/")
                     url = f"{GITHUB_RAW_BASE}/{repo}/{download_ref}/{encoded_path}"
                     attempts += 1
@@ -709,7 +710,7 @@ async def download_skills(
                         return False
 
             failure_reason = "commit_resolution_failed" if commit_resolution_failed else "not_found"
-            failures[failure_reason].append("; ".join([failure_source, *commit_errors]))
+            failures[failure_reason].append("; ".join(attempt_history or [failure_source]))
             stats["url_attempts"] += attempts
             now_utc = utc_now()
             entry = negative_cache.get(candidate_key)

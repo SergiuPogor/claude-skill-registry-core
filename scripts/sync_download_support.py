@@ -540,7 +540,7 @@ def bundled_file_blobs_match(
 def download_source_label(skill: dict) -> str:
     """Identify a failed source even when discovery supplied no display name."""
     repo = skill.get("repo") or "<missing repo>"
-    path = skill.get("path") or "SKILL.md"
+    path = skill.get("path") or "<unspecified path>"
     branch = skill.get("github_branch") or skill.get("branch") or "<unresolved branch>"
     commit = skill.get("github_commit_sha")
     revision = f"{branch}@{commit}" if commit else branch
