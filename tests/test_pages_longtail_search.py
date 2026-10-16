@@ -73,6 +73,10 @@ function reset() {
     assert.strictEqual(loads, 0, 'a highlighted match should not download the full catalog');
     context.search('');
     assert.strictEqual(loads, 0, 'empty queries should not download');
+    context.search('f');
+    assert.strictEqual(loads, 0, 'queries below the search engine minimum should not download');
+    node('search-input').listeners.keydown({ key: 'Enter', target: { value: 'f' } });
+    assert.strictEqual(loads, 0, 'submitting an unsearchable query should not download');
 
     context.search('falsify');
     assert.strictEqual(loads, 1, 'a missing highlighted query must search the full catalog');
@@ -98,6 +102,17 @@ function reset() {
     await cleared;
     assert.strictEqual(vm.runInContext('state.currentQuery', context), '');
     assert(node('search-results').classList.contains('hidden'), 'clearing the query must not reopen old results');
+
+    reset();
+    vm.runInContext("state.currentCategory = 'dev'", context);
+    context.search('falsify');
+    const navigated = context.activateFullSearch();
+    node('nav-tabs').listeners.click({ target: { closest: () => ({ dataset: { view: 'favorites' } }) } });
+    finish(full);
+    await navigated;
+    assert.strictEqual(vm.runInContext('state.currentView', context), 'favorites');
+    assert(!node('favorites-section').classList.contains('hidden'), 'loading must preserve navigation with active filters');
+    assert(node('search-results').classList.contains('hidden'));
 
     reset();
     context.loadFullSearchIndex = async () => { loads++; throw Error('offline'); };

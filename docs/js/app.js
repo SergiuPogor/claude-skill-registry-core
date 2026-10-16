@@ -414,8 +414,11 @@ async function activateFullSearch() {
             state.fuse = new Fuse(state.index.s, CONFIG.FUSE_OPTIONS);
             updateSearchScopeDisplay();
             // Use the current query: it may have changed or been cleared while loading.
-            if (state.currentQuery) search(state.currentQuery);
-            else if (hasActiveFilters()) await searchWithFiltersOnly();
+            if (state.currentView === 'search') {
+                if (state.currentQuery) search(state.currentQuery);
+                else if (hasActiveFilters()) await searchWithFiltersOnly();
+            }
+            return true;
         } catch (error) {
             elements.searchScope.textContent = `Full search failed: ${error.message}`;
             elements.searchAllBtn.textContent = 'Retry Search all';
@@ -423,11 +426,17 @@ async function activateFullSearch() {
             if (state.currentQuery && state.results.length === 0) {
                 elements.emptyState.classList.remove('hidden');
             }
+            return false;
         } finally {
             state.fullSearchPromise = null;
         }
     })();
     return state.fullSearchPromise;
+}
+
+async function waitForSearchCompletion() {
+    const completed = await state.fullSearchPromise;
+    return completed !== false && state.currentView === 'search';
 }
 
 function switchView(view) {
@@ -479,6 +488,7 @@ function search(query) {
         return;
     }
 
+    state.currentView = 'search';
     elements.featuredSection.classList.add('hidden');
     elements.leaderboardSection.classList.add('hidden');
     elements.statsSection.classList.add('hidden');
@@ -510,7 +520,7 @@ function search(query) {
     if (results.length === 0) {
         elements.searchResults.classList.add('hidden');
         elements.loadMore.classList.add('hidden');
-        if (state.index.isLite) {
+        if (state.index.isLite && state.currentQuery.length >= CONFIG.FUSE_OPTIONS.minMatchCharLength) {
             elements.emptyState.classList.add('hidden');
             void activateFullSearch();
         } else {
@@ -530,7 +540,9 @@ elements.searchInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
         search(e.target.value);
         // Fuzzy highlighted matches can hide an exact match elsewhere.
-        if (state.currentQuery && state.index.isLite) void activateFullSearch();
+        if (state.index.isLite && state.currentQuery.length >= CONFIG.FUSE_OPTIONS.minMatchCharLength) {
+            void activateFullSearch();
+        }
     }
 });
 
@@ -674,6 +686,7 @@ function hasActiveFilters() {
 
 async function searchWithFiltersOnly() {
     const startTime = performance.now();
+    state.currentView = 'search';
     state.displayedCount = 0;
 
     const baseSkills = await getFilterBaseSkills();
