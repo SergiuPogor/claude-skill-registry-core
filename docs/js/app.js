@@ -53,6 +53,7 @@ const CATEGORY_COLORS = {
 let state = {
     index: null,
     fullIndex: null,
+    fullSearchPromise: null,
     fuse: null,
     featured: [],
     plugins: [],
@@ -403,20 +404,30 @@ async function getFilterBaseSkills() {
 }
 
 async function activateFullSearch() {
+    if (state.fullSearchPromise) return state.fullSearchPromise;
     elements.searchAllBtn.disabled = true;
     elements.searchAllBtn.textContent = 'Loading all shards…';
     elements.searchScope.textContent = 'Loading the complete offline search index…';
-    try {
-        state.index = await loadFullSearchIndex();
-        state.fuse = new Fuse(state.index.s, CONFIG.FUSE_OPTIONS);
-        updateSearchScopeDisplay();
-        if (state.currentQuery) search(state.currentQuery);
-        else if (hasActiveFilters()) await searchWithFiltersOnly();
-    } catch (error) {
-        elements.searchScope.textContent = `Full search failed: ${error.message}`;
-        elements.searchAllBtn.textContent = 'Retry Search all';
-        elements.searchAllBtn.disabled = false;
-    }
+    state.fullSearchPromise = (async () => {
+        try {
+            state.index = await loadFullSearchIndex();
+            state.fuse = new Fuse(state.index.s, CONFIG.FUSE_OPTIONS);
+            updateSearchScopeDisplay();
+            // Use the current query: it may have changed or been cleared while loading.
+            if (state.currentQuery) search(state.currentQuery);
+            else if (hasActiveFilters()) await searchWithFiltersOnly();
+        } catch (error) {
+            elements.searchScope.textContent = `Full search failed: ${error.message}`;
+            elements.searchAllBtn.textContent = 'Retry Search all';
+            elements.searchAllBtn.disabled = false;
+            if (state.currentQuery && state.results.length === 0) {
+                elements.emptyState.classList.remove('hidden');
+            }
+        } finally {
+            state.fullSearchPromise = null;
+        }
+    })();
+    return state.fullSearchPromise;
 }
 
 function switchView(view) {
@@ -498,8 +509,13 @@ function search(query) {
 
     if (results.length === 0) {
         elements.searchResults.classList.add('hidden');
-        elements.emptyState.classList.remove('hidden');
         elements.loadMore.classList.add('hidden');
+        if (state.index.isLite) {
+            elements.emptyState.classList.add('hidden');
+            void activateFullSearch();
+        } else {
+            elements.emptyState.classList.remove('hidden');
+        }
     } else {
         elements.emptyState.classList.add('hidden');
         displayResults();
