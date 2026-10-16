@@ -54,6 +54,7 @@ let state = {
     index: null,
     fullIndex: null,
     fullSearchPromise: null,
+    fullSearchError: null,
     fuse: null,
     featured: [],
     plugins: [],
@@ -405,6 +406,7 @@ async function getFilterBaseSkills() {
 
 async function activateFullSearch() {
     if (state.fullSearchPromise) return state.fullSearchPromise;
+    state.fullSearchError = null;
     elements.searchAllBtn.disabled = true;
     elements.searchAllBtn.textContent = 'Loading all shards…';
     elements.searchScope.textContent = 'Loading the complete offline search index…';
@@ -420,6 +422,7 @@ async function activateFullSearch() {
             }
             return true;
         } catch (error) {
+            state.fullSearchError = error;
             elements.searchScope.textContent = `Full search failed: ${error.message}`;
             elements.searchAllBtn.textContent = 'Retry Search all';
             elements.searchAllBtn.disabled = false;
@@ -436,7 +439,7 @@ async function activateFullSearch() {
 
 async function waitForSearchCompletion() {
     const completed = await state.fullSearchPromise;
-    return completed !== false && state.currentView === 'search';
+    return completed !== false && !state.fullSearchError && state.currentView === 'search';
 }
 
 function switchView(view) {
@@ -477,6 +480,10 @@ function switchView(view) {
 
 function search(query) {
     const startTime = performance.now();
+    if (state.fullSearchError) {
+        state.fullSearchError = null;
+        updateSearchScopeDisplay();
+    }
 
     state.currentQuery = query.trim().toLowerCase();
     state.displayedCount = 0;

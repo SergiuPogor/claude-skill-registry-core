@@ -110,6 +110,7 @@ function reset() {
     node('nav-tabs').listeners.click({ target: { closest: () => ({ dataset: { view: 'favorites' } }) } });
     finish(full);
     await navigated;
+    assert.strictEqual(await context.waitForSearchCompletion(), false);
     assert.strictEqual(vm.runInContext('state.currentView', context), 'favorites');
     assert(!node('favorites-section').classList.contains('hidden'), 'loading must preserve navigation with active filters');
     assert(node('search-results').classList.contains('hidden'));
@@ -122,11 +123,13 @@ function reset() {
     assert.strictEqual(node('search-scope').textContent, 'Full search failed: offline');
     assert.strictEqual(node('search-all-btn').disabled, false);
     assert(!node('empty-state').classList.contains('hidden'));
+    assert.strictEqual(await context.waitForSearchCompletion(), false, 'a fast failed load must not count as completed search');
     context.loadFullSearchIndex = async () => { loads++; return full; };
     await context.activateFullSearch();
     assert.strictEqual(loads, 2);
     assert.strictEqual(vm.runInContext('state.results[0].item.n', context), 'falsify');
     assert.strictEqual(node('result-count').textContent, '1 results');
+    assert.strictEqual(await context.waitForSearchCompletion(), true);
 
     reset();
     // A fuzzy startup match must not prevent an explicitly submitted search
